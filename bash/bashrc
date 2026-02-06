@@ -1,0 +1,56 @@
+mkreport() {
+  if [ -z "$1" ]; then
+    echo "Usage: mkreport <report-name>"
+    return 1
+  fi
+
+  local BASE="$HOME/documents/report"
+  local REPO="git@github.com:akTARDIGRADE13/latex-report-template.git"
+
+  mkdir -p "$BASE"
+  cd "$BASE" || return 1
+
+  git clone "$REPO" "$1" || return 1
+  cd "$1" || return 1
+
+  echo "Created report: $BASE/$1"
+}
+
+# ---- color prompt ------------------------------------------------
+case "$TERM" in
+    xterm*|screen*|tmux*|rxvt*|linux*)
+        ;;
+    *)
+        ;;
+esac
+
+# ---- prompt ------------------------------------------------------
+# Full path:
+#   \w  : full path (HOME is shown as ~)
+#   $(pwd) : absolute path without ~
+
+# Choose ONE of the following lines
+
+# (A) Standard full path (HOME -> ~)  ← recommended
+PROMPT_PATH='\w'
+
+# (B) Absolute path always
+# PROMPT_PATH='$(pwd)'
+
+# SSH detection (optional, harmless)
+if [ -n "${SSH_CONNECTION-}${REMOTEHOST-}" ]; then
+    HOST_PREFIX="\[\e[38;5;109m\]$(hostname -s | tr '[:lower:]' '[:upper:]')\[\e[0m\] "
+else
+    HOST_PREFIX=""
+fi
+
+# Final PS1
+# - path: green-ish (38;5;114)
+# - user@host: default color
+export PS1="[${HOST_PREFIX}\u@\h \[\e[38;5;114m\]${PROMPT_PATH}\[\e[0m\]]\$ "
+
+# ---- ls color (same palette as before) ---------------------------
+export LS_COLORS="di=38;5;110:ln=38;5;109:so=38;5;108:pi=38;5;109:ex=38;5;114:bd=38;5;67:cd=38;5;67"
+alias ls='ls --color=auto'
+
+# ==================================================
