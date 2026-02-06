@@ -1,56 +1,164 @@
-mkreport() {
-  if [ -z "$1" ]; then
-    echo "Usage: mkreport <report-name>"
+# ~/.bashrc
+# --------------------------------------------------
+# Policy:
+# - Keep sections small and independent
+# - Avoid side effects at load time (except prompt/env/alias)
+# --------------------------------------------------
+
+# ========== 0. Guards / basics ==========
+# (optional) interactive shell only
+case "$-" in
+  *i*) ;;
+  *) return ;;
+esac
+
+# ========== 1. Constants ==========
+REPORT_BASE="$HOME/documents/report"
+REPORT_TEMPLATE_REPO="git@github.com:akTARDIGRADE13/latex-report-template.git"
+
+# Prompt options
+PROMPT_SHOW_SSH_HOST_PREFIX=1
+PROMPT_PATH_STYLE="tilde"   # "tilde" or "absolute"
+PROMPT_PATH_TILDE='\w'      # HOME -> ~
+PROMPT_PATH_ABS='$(pwd)'    # absolute path
+
+# ANSI colors (256-color)
+C_RESET='\[\e[0m\]'
+C_HOST='\[\e[38;5;109m\]'
+C_PATH='\[\e[38;5;114m\]'
+
+# ========== 2. Functions ==========
+
+# cpy <file>
+#
+# Copy the contents of a file to the Windows clipboard.
+# Intended for use on WSL.
+#
+# Example:
+#   cpy main.cpp
+#
+# Notes:
+# - Requires powershell.exe (WSL on Windows)
+# - File is read as UTF-8
+#
+cpy() {
+  if [ $# -ne 1 ]; then
+    echo "Usage: cpy <file>" >&2
     return 1
   fi
 
-  local BASE="$HOME/documents/report"
-  local REPO="git@github.com:akTARDIGRADE13/latex-report-template.git"
+  local file="$1"
 
-  mkdir -p "$BASE"
-  cd "$BASE" || return 1
+  if [ ! -f "$file" ]; then
+    echo "Error: file not found: $file" >&2
+    return 1
+  fi
 
-  git clone "$REPO" "$1" || return 1
-  cd "$1" || return 1
-
-  echo "Created report: $BASE/$1"
+  powershell.exe -NoProfile -Command \
+    "Set-Clipboard -Value ([IO.File]::ReadAllText('$(wslpath -w "$file")', [Text.Encoding]::UTF8))"
 }
 
-# ---- color prompt ------------------------------------------------
-case "$TERM" in
-    xterm*|screen*|tmux*|rxvt*|linux*)
-        ;;
-    *)
-        ;;
-esac
+# gpp [g++ args...]
+#
+# Compile C++ with a strong debug configuration:
+# - no optimization (-O0) + debug symbols (-g)
+# - libstdc++ debug mode
+# - AddressSanitizer
+# - warnings
+# - trap on signed overflow
+#
+# Examples:
+#   gpp main.cpp
+#   gpp -o main main.cpp
+#   gpp main.cpp other.cpp
+#
+gpp() {
+  if [ $# -eq 0 ]; then
+    echo "Usage: gpp <files...> [g++ options]" >&2
+    echo "Example: gpp -o a.out main.cpp" >&2
+    return 1
+  fi
 
-# ---- prompt ------------------------------------------------------
-# Full path:
-#   \w  : full path (HOME is shown as ~)
-#   $(pwd) : absolute path without ~
+  g++ -std=gnu++20 -O0 -g \
+    -fsanitize=address \
+    -Wall -Wextra -Wshadow \
+    -ftrapv \
+    "$@"
+}
 
-# Choose ONE of the following lines
+# mkreport <report-name>
+#
+# Create a new LaTeX report directory from the template repository.
+#
+# What this does:
+# - Clone the report template repository
+# - Create a new directory under:
+#     ~/documents/report/<report-name>
+#
+# Notes:
+# - The current working directory is NOT changed
+# - Fails if the target directory already exists
+#
+# Example:
+#   mkreport fluid-dynamics
+#   cd ~/documents/report/fluid-dynamics
+#
+mkreport() {
+  if [ $# -ne 1 ]; then
+    echo "Usage: mkreport <report-name>" >&2
+    return 1
+  fi
 
-# (A) Standard full path (HOME -> ~)  ← recommended
-PROMPT_PATH='\w'
+  local name="$1"
+  local base="$REPORT_BASE"
+  local repo="$REPORT_TEMPLATE_REPO"
 
-# (B) Absolute path always
-# PROMPT_PATH='$(pwd)'
+  mkdir -p "$base" || return 1
 
-# SSH detection (optional, harmless)
-if [ -n "${SSH_CONNECTION-}${REMOTEHOST-}" ]; then
-    HOST_PREFIX="\[\e[38;5;109m\]$(hostname -s | tr '[:lower:]' '[:upper:]')\[\e[0m\] "
-else
-    HOST_PREFIX=""
-fi
+  # Avoid clobber
+  if [ -e "$base/$name" ]; then
+    echo "Error: already exists: $base/$name" >&2
+    return 1
+  fi
 
-# Final PS1
-# - path: green-ish (38;5;114)
-# - user@host: default color
-export PS1="[${HOST_PREFIX}\u@\h \[\e[38;5;114m\]${PROMPT_PATH}\[\e[0m\]]\$ "
+  ( # subshell: keep caller's cwd unchanged
+    cd "$base" || exit 1
+    git clone "$repo" "$name" || exit 1
+    echo "Created report: $base/$name"
+  )
+}
 
-# ---- ls color (same palette as before) ---------------------------
+# ========== 3. Prompt ==========
+__prompt_is_ssh() {
+  [ -n "${SSH_CONNECTION-}${REMOTEHOST-}" ]
+}
+
+__prompt_host_prefix() {
+  # Uppercased short hostname when SSH
+  if [ "$PROMPT_SHOW_SSH_HOST_PREFIX" -eq 1 ] && __prompt_is_ssh; then
+    printf '%s%s%s ' "$C_HOST" "$(hostname -s | tr '[:lower:]' '[:upper:]')" "$C_RESET"
+  fi
+}
+
+__prompt_path() {
+  case "$PROMPT_PATH_STYLE" in
+    absolute) printf '%s' "$PROMPT_PATH_ABS" ;;
+    *)        printf '%s' "$PROMPT_PATH_TILDE" ;;
+  esac
+}
+
+# PS1:
+# [<SSH_HOST_PREFIX>user@host <green path>]$
+export PS1="[$(__prompt_host_prefix)\u@\h ${C_PATH}$(__prompt_path)${C_RESET}]\$ "
+
+# ========== 4. Aliases / env ==========
 export LS_COLORS="di=38;5;110:ln=38;5;109:so=38;5;108:pi=38;5;109:ex=38;5;114:bd=38;5;67:cd=38;5;67"
 alias ls='ls --color=auto'
 
-# ==================================================
+# ========== 5. Local overrides (not tracked) ==========
+# Put machine-specific settings here: proxy, PATH tweaks, HPC modules, secrets...
+if [ -f "$HOME/.bashrc.local" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.bashrc.local"
+fi
+
