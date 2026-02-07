@@ -129,7 +129,47 @@ mkreport() {
   )
 }
 
-# ========== 3. Prompt ==========
+# ========== 3. PATH ==========
+# Centralized PATH management
+# - Easy to add/remove entries
+# - Avoid duplicates
+# - Only add if directory exists
+
+__path_prepend() {
+  case ":$PATH:" in
+    *":$1:"*) ;;
+    *) PATH="$1:$PATH" ;;
+  esac
+}
+
+__path_append() {
+  case ":$PATH:" in
+    *":$1:"*) ;;
+    *) PATH="$PATH:$1" ;;
+  esac
+}
+
+# Directories to prepend to PATH (higher priority)
+PATH_PREPEND=(
+  "$HOME/.local/bin"        # user binaries (nvim, etc.)
+)
+
+# Directories to append to PATH (lower priority)
+PATH_APPEND=(
+  # add later if needed
+)
+
+for dir in "${PATH_PREPEND[@]}"; do
+  [ -d "$dir" ] && __path_prepend "$dir"
+done
+
+for dir in "${PATH_APPEND[@]}"; do
+  [ -d "$dir" ] && __path_append "$dir"
+done
+
+unset dir PATH_PREPEND PATH_APPEND; unset -f __path_prepend __path_append
+
+# ========== 4. Prompt ==========
 __prompt_is_ssh() {
   [ -n "${SSH_CONNECTION-}${REMOTEHOST-}" ]
 }
@@ -152,13 +192,13 @@ __prompt_path() {
 # [<SSH_HOST_PREFIX>user@host <green path>]$
 export PS1="$(__prompt_host_prefix)${C_USERHOST}\u@\h${C_RESET}:${C_PATH}$(__prompt_path)${C_RESET}\$ "
 
-# ========== 4. Aliases / env ==========
+# ========== 5. Aliases / env ==========
 if command -v dircolors >/dev/null 2>&1; then
     eval "$(dircolors -b)"
 fi
 alias ls='ls --color=auto'
 
-# ========== 5. Local overrides (not tracked) ==========
+# ========== 6. Local overrides (not tracked) ==========
 # Put machine-specific settings here: proxy, PATH tweaks, HPC modules, secrets...
 if [ -f "$HOME/.bashrc.local" ]; then
   # shellcheck source=/dev/null
